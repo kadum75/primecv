@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, LogIn, UserPlus, Chrome, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { supabase, getCurrentMonthString, handleSupabaseError, OperationType, isSupabaseConfigValid } from '../supabase';
+import { supabase, isSupabaseConfigValid, syncUserDocument } from '../supabase';
 import { LegalModal, LegalType } from './LegalModal';
 
 interface AuthModalProps {
@@ -29,52 +29,40 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setLegalModal({ isOpen: true, type });
   };
 
-  const handleSyncUserDoc = async (supabaseUser: any, consent: boolean = true) => {
-    const isAdmin = supabaseUser.email === 'rjcosta@gmail.com';
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
 
     try {
-      const { data: existing } = await supabase
-        .from('users')
-        .select('id')
-        .eq('uid', supabaseUser.id)
-        .single();
-
-      if (!existing) {
-        const { error } = await supabase
-          .from('users')
-          .insert({
-            uid: supabaseUser.id,
-            email: supabaseUser.email,
-            display_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
-            photo_url: supabaseUser.user_metadata?.avatar_url || null,
-            is_pro: isAdmin,
-            preview_count: 0,
-            last_preview_reset: getCurrentMonthString(),
-            subscription_status: isAdmin ? 'pro_bypass' : 'free',
-            plan_type: isAdmin ? 'admin' : null,
-            gdpr_consent: consent,
-          });
-
+      if (isSignIn) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (error) throw error;
-      } else {
-        const updates: any = {
-          last_login_at: new Date().toISOString(),
-        };
-        if (isAdmin) {
-          updates.is_pro = true;
-          updates.subscription_status = 'pro_bypass';
-          updates.plan_type = 'admin';
+        if (data.user) {
+          await syncUserDocument(data.user);
         }
-        const { error } = await supabase
-          .from('users')
-          .update(updates)
-          .eq('uid', supabaseUser.id);
-
+        onClose();
+      } else {
+        if (!agreeToTerms) {
+          throw new Error('You must agree to the Privacy Policy and Terms of Service.');
+        }
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
         if (error) throw error;
+        if (data.user) {
+          await syncUserDocument(data.user, agreeToTerms);
+        }
+        onClose();
       }
     } catch (err: any) {
-      console.error('Error syncing user document:', err);
-      handleSupabaseError(err, OperationType.WRITE, `users/${supabaseUser.id}`);
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -97,43 +85,6 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     } catch (err: any) {
       console.error('Google Sign-in Error:', err);
       setError(`Sign-in failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try {
-      if (isSignIn) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-        if (data.user) {
-          await handleSyncUserDoc(data.user);
-        }
-        onClose();
-      } else {
-        if (!agreeToTerms) {
-          throw new Error('You must agree to the Privacy Policy and Terms of Service.');
-        }
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (error) throw error;
-        if (data.user) {
-          await handleSyncUserDoc(data.user, agreeToTerms);
-        }
-        onClose();
-      }
-    } catch (err: any) {
-      setError(err.message);
     } finally {
       setLoading(false);
     }

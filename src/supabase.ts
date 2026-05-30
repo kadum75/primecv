@@ -6,6 +6,11 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigValid = !!supabaseUrl && !!supabaseAnonKey;
 
+export const missingConfigVars = {
+  VITE_SUPABASE_URL: !supabaseUrl,
+  VITE_SUPABASE_ANON_KEY: !supabaseAnonKey,
+};
+
 // ── Stub ────────────────────────────────────────────────────────
 // When Supabase env vars are missing, use a mock so PrimeCV runs
 // without a real backend. Remove this once you configure Supabase.
@@ -177,6 +182,57 @@ export function handleSupabaseError(error: unknown, operationType: OperationType
   };
   console.error('Supabase Error Details:', JSON.stringify(errInfo, null, 2));
   throw new Error(JSON.stringify(errInfo));
+}
+
+export async function syncUserDocument(supabaseUser: any, consent: boolean = true) {
+  if (!supabaseUser) return;
+
+  const isAdmin = supabaseUser.email === 'rjcosta@gmail.com';
+
+  try {
+    const { data: existing } = await supabase
+      .from('users')
+      .select('id')
+      .eq('uid', supabaseUser.id)
+      .single();
+
+    if (!existing) {
+      const { error } = await supabase
+        .from('users')
+        .insert({
+          uid: supabaseUser.id,
+          email: supabaseUser.email,
+          display_name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'User',
+          photo_url: supabaseUser.user_metadata?.avatar_url || null,
+          is_pro: isAdmin,
+          preview_count: 0,
+          last_preview_reset: getCurrentMonthString(),
+          subscription_status: isAdmin ? 'pro_bypass' : 'free',
+          plan_type: isAdmin ? 'admin' : null,
+          gdpr_consent: consent,
+        });
+
+      if (error) throw error;
+    } else {
+      const updates: any = {
+        last_login_at: new Date().toISOString(),
+      };
+      if (isAdmin) {
+        updates.is_pro = true;
+        updates.subscription_status = 'pro_bypass';
+        updates.plan_type = 'admin';
+      }
+      const { error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('uid', supabaseUser.id);
+
+      if (error) throw error;
+    }
+  } catch (err: any) {
+    console.error('Error syncing user document:', err);
+    handleSupabaseError(err, OperationType.WRITE, `users/${supabaseUser.id}`);
+  }
 }
 
 // Month String Helper (YYYY-MM)
