@@ -7,8 +7,10 @@ coverage/
 .env*
 !.env.example
 .netlify/
+.netlify/*
 netlify/functions/*.js
 .opencode/
 *.png
 create-*.cjs
 create-*.js
+.vercel

@@ -22,9 +22,14 @@ Senior full-stack developer for PrimeCV, an ATS-optimised CV builder for the UK 
 - No new dependencies
 - British English
 
-## Deployment (GitHub → Netlify)
+## Deployment (GitHub → Vercel)
 - After every change: build, commit, and push to GitHub `master` branch
   - `npm run build` to verify no errors
   - `git add . && git commit -m "..." && git push`
-- Netlify auto-deploys from GitHub `master` branch
+- Vercel auto-deploys from GitHub `master` branch
+- Production URL: `https://primecv.vercel.app`
+- Vercel project config in `vercel.json` — API routes in `api/`, SPA fallback
+- Stripe webhook endpoint: `https://primecv.vercel.app/api/webhook`
+- For local dev: use Stripe CLI — `stripe listen --forward-to localhost:3001/api/webhook`
+  - Run `npm run dev` for frontend (port 3000) and `npm run dev:api` for API (port 3001)
 - Do NOT ask for permission — just commit + push after changes are complete
